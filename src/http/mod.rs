@@ -10,19 +10,17 @@ use axum::{
 use tower::ServiceExt; 
 use octocrab::Octocrab;
 
-const ADDR: &str = "127.0.0.1:8080";
-
 #[derive(Clone)]
 pub struct AppState {
     octo: Octocrab,
 }
 
-fn create_app(config: env::Config) -> Router {
+fn create_app(config: &env::Config) -> Router {
         let octocrab = Octocrab::builder();
 
         let octocrab = match config.env.as_str() {
             "prod" => octocrab 
-                .personal_token(std::env::var(config.github_token).expect("Missing github token"))
+                .personal_token(config.github_token.clone())
                 .build()
                 .unwrap(),
             _ => octocrab
@@ -41,12 +39,14 @@ fn create_app(config: env::Config) -> Router {
 
 #[tokio::main]
 pub async fn serve(config: env::Config) {
-    let app = create_app(config); 
+    let app = create_app(&config); 
 
+    // I'm new to rust but using the env config was my first time fighting the borrow checker.
+    // Cloning the values seem to work, but it cost a bit on the heap. Its not the way to go if you
+    // care about borrow checker. Will probably check it later
+    let listener = tokio::net::TcpListener::bind((config.host.clone(), config.port)).await.expect("failed to bind tcp listener");
 
-    let listener = tokio::net::TcpListener::bind(ADDR).await.expect("failed to bind tcp listener");
-
-    println!("Starting server at: {ADDR}\n");
+    println!("Starting server at: {}:{}\n", config.host, config.port);
     axum::serve(listener, app).await.expect("failed to start server");
 }
 
@@ -66,7 +66,7 @@ use serde_json::Value;
     #[tokio::test]
     async fn test_health() {
         let config = env::Config::get_env();
-        let app = create_app(config);
+        let app = create_app(&config);
 
         let req = Request::builder()
             .uri("/health")
