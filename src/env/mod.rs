@@ -10,7 +10,7 @@ pub struct Config {
 
 impl Config {
     pub fn get_env() -> Config {
-        let host = env::var("HOST").unwrap_or("http://192.0.0.1".to_string());
+        let host = env::var("HOST").unwrap_or("127.0.0.1".to_string());
         let port: u16 = match env::var("port") {
           Ok(val) => val.parse().unwrap_or(8080),
           Err(_) => 8080,
