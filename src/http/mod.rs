@@ -1,0 +1,89 @@
+mod health;
+mod github;
+use super::env;
+
+
+use axum::{
+     Router, routing::get,
+};
+// tower is used for oneshot in test, don't remove it even it your linter is screaming
+use tower::ServiceExt; 
+use octocrab::Octocrab;
+
+const ADDR: &str = "127.0.0.1:8080";
+
+#[derive(Clone)]
+pub struct AppState {
+    octo: Octocrab,
+}
+
+fn create_app(config: env::Config) -> Router {
+        let octocrab = Octocrab::builder();
+
+        let octocrab = match config.env.as_str() {
+            "prod" => octocrab 
+                .personal_token(std::env::var(config.github_token).expect("Missing github token"))
+                .build()
+                .unwrap(),
+            _ => octocrab
+                .build()
+                .unwrap(),
+        };
+
+        let state = AppState{ octo: octocrab };
+        
+         Router::new()
+        .route("/", get(health::root))
+        .route("/health", get(health::health))
+        .route("/prget", get(github::prget))
+        .with_state(state)
+}
+
+#[tokio::main]
+pub async fn serve(config: env::Config) {
+    let app = create_app(config); 
+
+
+    let listener = tokio::net::TcpListener::bind(ADDR).await.expect("failed to bind tcp listener");
+
+    println!("Starting server at: {ADDR}\n");
+    axum::serve(listener, app).await.expect("failed to start server");
+}
+
+
+// ----- [ Tests ] -----
+
+
+#[cfg(test)]
+mod tests {
+    use axum::{body::{Body}, http::{Request, StatusCode}};
+use serde_json::Value;
+
+    use super::*;
+
+
+    
+    #[tokio::test]
+    async fn test_health() {
+        let config = env::Config::get_env();
+        let app = create_app(config);
+
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let res = app.oneshot(req).await.unwrap();
+
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(res.into_body(), 1024).await.unwrap();
+
+        let json: Value = serde_json::from_slice(
+            &body
+        ).unwrap();
+
+        assert_eq!(json["status"], "ok");
+        assert_eq!(json["message"], "healthy")
+    }
+}
