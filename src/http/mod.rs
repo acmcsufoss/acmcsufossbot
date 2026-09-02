@@ -41,8 +41,13 @@ fn create_app(config: &env::Config) -> Router {
 pub async fn serve(config: env::Config) {
     let app = create_app(&config); 
 
-    println!("Starting server at: {}:{}\n", config.host, config.port);
-    let listener = tokio::net::TcpListener::bind((&config.host[..], config.port)).await.expect("failed to bind tcp listener");
+    {
+        let host = &config.host;
+        let port = &config.port;
+        println!("Starting server at: {}:{}\n", host, port);
+    }
+
+    let listener = tokio::net::TcpListener::bind((config.host, config.port)).await.expect("failed to bind tcp listener");
 
     axum::serve(listener, app).await.expect("failed to start server");
 }
